@@ -1,7 +1,7 @@
 # OpenCode — Termux
 
 <p align="center">
-  <img src="imagenes/opencode-banner.jpg" alt="OpenCode CLI" width="600">
+  <img src="imagenes/opencode.jpg" alt="OpenCode CLI" width="600">
 </p>
 
 Instalacion nativa de **OpenCode** en Termux para Android ARM64.
