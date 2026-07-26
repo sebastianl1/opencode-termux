@@ -256,10 +256,7 @@ check_environment() {
 }
 
 check_dependencies() {
-    if ! command -v curl &>/dev/null; then
-        run_hidden "Actualizar repositorios" pkg update -y
-        run_hidden "Instalar curl" pkg install -y curl
-    fi
+    :
 }
 
 check_existing() {
@@ -268,7 +265,7 @@ check_existing() {
     section_header "Estado actual"
 
     check_item "OpenCode" "ok" "$current_version"
-    check_item "Origen" "ok" "$OPCODE_CONFIG_DIR"
+    check_item "Origen" "ok" "$(command -v opencode)"
 
     if ! ask_yes_no "¿Reinstalar opencode?" "N"; then
         print_info "Instalacion omitida."
