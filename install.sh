@@ -2,14 +2,17 @@
 #
 # OpenCode — Termux
 # Script de instalacion para Termux
-# v1.0.0
+# v2.0.0
 #
 # Script creado por Sebastian Laguna
 # https://github.com/sebastianl1/opencode-termux
 #
 # Descripcion:
-#   Instala OpenCode de forma nativa en Termux
-#   utilizando npm (Node.js). Sin proot, sin VMs, sin Cloud Shell.
+#   Instala OpenCode de forma nativa en Termux: descarga el binario
+#   oficial (build glibc) y lo ejecuta con un launcher nativo Android
+#   a traves de la capa glibc de Termux.
+#   Multi-fuente: vendor oficial, espejo propio y termuxvoid.
+#   Sin proot, sin VMs, sin Cloud Shell.
 #
 # Uso:
 #   bash install.sh              Instalacion completa
@@ -22,17 +25,30 @@ set -eEuo pipefail
 
 # ── Configuracion ────────────────────────────────────────────────────────────
 
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="2.0.0"
 SCRIPT_AUTHOR="Sebastian Laguna"
 SCRIPT_REPO="https://github.com/sebastianl1/opencode-termux"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 OPCODE_BIN_DIR="$PREFIX/bin"
+OPCODE_SHARE_DIR="$PREFIX/share/opencode"
+OPCODE_REAL="$OPCODE_SHARE_DIR/opencode.real"
 OPCODE_CONFIG_DIR="$HOME/.config/opencode"
 OPCODE_CONFIG_FILE="$OPCODE_CONFIG_DIR/opencode.json"
 BACKUP_DIR="$HOME/backups/opencode"
 TMP_DIR="$PREFIX/tmp/opencode-install"
 LOG_FILE="$TMP_DIR/install.log"
 INSTALL_FAILED=false
+INSTALL_METHOD=""
+
+# Fuentes del binario (por prioridad):
+#   A. Vendor oficial  -> GitHub de anomalyco/opencode (siempre ultima)
+#   B. Espejo propio   -> GitHub Releases de este repositorio
+#   C. npm oficial     -> paquete de plataforma 'opencode-linux-arm64'
+#   D. termuxvoid      -> paquete Termux 'opencode' (ultimo recurso)
+VENDOR_DL="https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-arm64.tar.gz"
+MIRROR_DL="https://github.com/sebastianl1/opencode-termux/releases/latest/download/opencode-linux-arm64.tar.gz"
 
 # ── Colores (profesionales, sin llamativos) ─────────────────────────────────
 
@@ -158,8 +174,8 @@ run_hidden() {
         sleep 0.1
     done
 
-    wait "$pid"
-    local exit_code=$?
+    local exit_code=0
+    wait "$pid" || exit_code=$?
 
     printf "\r"
 
@@ -167,13 +183,38 @@ run_hidden() {
         printf "  ${GREEN}✔${RESET} ${BOLD}%-34s${RESET} ${GREEN}hecho${RESET}\n" "$desc"
     else
         printf "  ${RED}✘${RESET} ${BOLD}%-34s${RESET} ${RED}fallo${RESET}\n" "$desc"
-        echo ""
-        echo -e "  ${DIM}Ultimas lineas del log:${RESET}"
-        tail -5 "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
-            echo -e "  ${DIM}  ${line}${RESET}"
-        done
-        exit 1
+        return "$exit_code"
     fi
+}
+
+show_log_tail() {
+    echo ""
+    echo -e "  ${DIM}Ultimas lineas del log:${RESET}"
+    tail -15 "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+        echo -e "  ${DIM}  ${line}${RESET}"
+    done
+}
+
+explain_termux_failure() {
+    local log_content
+    log_content=$(cat "$LOG_FILE" 2>/dev/null || true)
+
+    case "$log_content" in
+        *"unable to locate package"*|*"E: Unable"*|*"Failed to fetch"*|*"Could not resolve"*|*"curl"*|*"opencode-android-arm64"*|*"Cannot find module"*|*"unexpected e_type"*|*"required file not found"*|*"Binary not found"*|*"failed to install the right opencode"*)
+            echo ""
+            echo -e "  ${YELLOW}⬡${RESET} ${BOLD}Instalacion nativa de opencode en Termux${RESET}"
+            echo -e "  ${DIM}OpenCode se instala con el binario oficial glibc + un${RESET}"
+            echo -e "  ${DIM}launcher nativo Android, a traves de la capa glibc de${RESET}"
+            echo -e "  ${DIM}Termux. No usa npm ni proot.${RESET}"
+            echo ""
+            echo -e "  ${BOLD}Si fallaron todas las fuentes, verifica:${RESET}"
+            echo -e "  ${DIM}1.${RESET} Conexion a internet (el binario pesa ~90-180MB)"
+            echo -e "  ${DIM}2.${RESET} Que la capa glibc quede instalada:"
+            echo -e "     ${RESET}pkg install -y glibc-repo && pkg update && pkg install -y glibc"
+            echo -e "  ${DIM}3.${RESET} Reintentar en otro momento (descarga de GitHub/npm)"
+            echo ""
+            ;;
+    esac
 }
 
 detect_installed_version() {
@@ -204,8 +245,6 @@ check_environment() {
 
     local env_ok=true
     local arch_ok=true
-    local node_ok=true
-    local npm_ok=true
 
     if [ -n "${TERMUX_VERSION:-}" ]; then
         check_item "Entorno Termux" "ok" ""
@@ -224,19 +263,17 @@ check_environment() {
     if command -v node &>/dev/null; then
         local node_ver
         node_ver=$(node --version 2>/dev/null)
-        check_item "Node.js" "ok" "$node_ver"
+        check_item "Node.js (opcional)" "ok" "$node_ver"
     else
-        check_item "Node.js" "skip" "instalando..."
-        node_ok=false
+        check_item "Node.js (opcional)" "skip" "no requerido"
     fi
 
     if command -v npm &>/dev/null; then
         local npm_ver
         npm_ver=$(npm --version 2>/dev/null)
-        check_item "npm" "ok" "v$npm_ver"
+        check_item "npm (opcional)" "ok" "v$npm_ver"
     else
-        check_item "npm" "skip" "instalando..."
-        npm_ok=false
+        check_item "npm (opcional)" "skip" "no requerido"
     fi
 
     echo ""
@@ -244,15 +281,11 @@ check_environment() {
     if [ "$env_ok" != "true" ] || [ "$arch_ok" != "true" ]; then
         print_error "Este instalador solo funciona en Termux ARM64 (aarch64)."
     fi
+}
 
-    if [ "$node_ok" != "true" ] || [ "$npm_ok" != "true" ]; then
-        if ask_yes_no "¿Instalar Node.js y npm?" "S"; then
-            run_hidden "Actualizar repositorios" pkg update -y
-            run_hidden "Instalar Node.js" pkg install -y nodejs
-        else
-            print_error "Node.js es necesario para ejecutar OpenCode. Instalalo con: pkg install nodejs"
-        fi
-    fi
+add_termuxvoid_repo() {
+    mkdir -p "$PREFIX/etc/apt/sources.list.d"
+    echo "deb [trusted=yes arch=all] https://termuxvoid.github.io/repo termuxvoid main" > "$PREFIX/etc/apt/sources.list.d/termuxvoid.list"
 }
 
 check_dependencies() {
@@ -300,10 +333,131 @@ restore_backup() {
     fi
 }
 
+ensure_glibc_layer() {
+    if [ ! -f "$PREFIX/etc/apt/sources.list.d/glibc.list" ]; then
+        run_hidden "Actualizar repositorios" pkg update -y || {
+            show_log_tail
+            print_error "Falló 'pkg update'. Revisa tu conexión a internet."
+        }
+        run_hidden "Agregar repositorio glibc" pkg install -y glibc-repo || {
+            show_log_tail
+            print_error "No se pudo agregar el repositorio glibc de Termux."
+        }
+        run_hidden "Actualizar repositorios" pkg update -y || {
+            show_log_tail
+            print_error "Falló 'pkg update'. Revisa tu conexión a internet."
+        }
+    fi
+
+    run_hidden "Instalar capa glibc" pkg install -y glibc ca-certificates ca-certificates-glibc clang curl tar || {
+        show_log_tail
+        print_error "No se pudo instalar la capa glibc de Termux (glibc)."
+    }
+}
+
+fetch_binary_from_url() {
+    local url="$1"
+    local archive="$TMP_DIR/opencode-linux-arm64.tar.gz"
+
+    curl -fsSL --retry 2 --connect-timeout 20 --max-time 900 -o "$archive" "$url" || return 1
+    mkdir -p "$TMP_DIR/bin"
+    tar -xzf "$archive" -C "$TMP_DIR/bin"
+    [ -f "$TMP_DIR/bin/opencode" ]
+}
+
+fetch_binary_from_npm() {
+    local meta tarball archive
+
+    meta=$(curl -fsSL --connect-timeout 20 --max-time 60 "https://registry.npmjs.org/opencode-linux-arm64/latest") || return 1
+    tarball=$(printf '%s' "$meta" | grep -o '"tarball":"[^"]*"' | cut -d'"' -f4) || return 1
+    [ -n "$tarball" ] || return 1
+
+    archive="$TMP_DIR/opencode-linux-arm64.tgz"
+    curl -fsSL --retry 2 --connect-timeout 20 --max-time 900 -o "$archive" "$tarball" || return 1
+    mkdir -p "$TMP_DIR/npmbin"
+    tar -xzf "$archive" -C "$TMP_DIR/npmbin"
+    [ -f "$TMP_DIR/npmbin/package/bin/opencode" ]
+}
+
+install_launcher() {
+    local launcher_src="$SCRIPT_DIR/launcher.c"
+
+    if [ ! -f "$launcher_src" ]; then
+        print_error "No se encontró 'launcher.c' junto a install.sh ($SCRIPT_DIR)."
+    fi
+
+    if ! run_hidden "Compilar launcher nativo" cc -O2 -DPREFIX="\"$PREFIX\"" -o "$OPCODE_BIN_DIR/opencode" "$launcher_src"; then
+        show_log_tail
+        print_error "Falló la compilación del launcher nativo (requiere clang)."
+    fi
+    chmod 755 "$OPCODE_BIN_DIR/opencode"
+}
+
+fetch_opencode_binary() {
+    mkdir -p "$OPCODE_SHARE_DIR"
+
+    if run_hidden "Descargar binario (vendor)" fetch_binary_from_url "$VENDOR_DL"; then
+        cp "$TMP_DIR/bin/opencode" "$OPCODE_REAL"
+        chmod 755 "$OPCODE_REAL"
+        INSTALL_METHOD="vendor"
+        return 0
+    fi
+
+    if run_hidden "Descargar binario (espejo)" fetch_binary_from_url "$MIRROR_DL"; then
+        cp "$TMP_DIR/bin/opencode" "$OPCODE_REAL"
+        chmod 755 "$OPCODE_REAL"
+        INSTALL_METHOD="espejo"
+        return 0
+    fi
+
+    if run_hidden "Descargar binario (npm)" fetch_binary_from_npm; then
+        cp "$TMP_DIR/npmbin/package/bin/opencode" "$OPCODE_REAL"
+        chmod 755 "$OPCODE_REAL"
+        INSTALL_METHOD="npm"
+        return 0
+    fi
+
+    ensure_termuxvoid_fallback
+}
+
+ensure_termuxvoid_fallback() {
+    if [ ! -f "$PREFIX/etc/apt/sources.list.d/termuxvoid.list" ]; then
+        run_hidden "Actualizar repositorios" pkg update -y || {
+            show_log_tail
+            print_error "Falló 'pkg update'. Revisa tu conexión a internet."
+        }
+        run_hidden "Agregar repositorio termuxvoid" add_termuxvoid_repo || {
+            show_log_tail
+            print_error "No se pudo configurar el repositorio termuxvoid."
+        }
+        run_hidden "Actualizar repositorios" pkg update -y || {
+            show_log_tail
+            print_error "Falló 'pkg update'. Revisa tu conexión a internet."
+        }
+    fi
+
+    if run_hidden "Instalar opencode (termuxvoid)" pkg install -y opencode; then
+        INSTALL_METHOD="termuxvoid"
+    else
+        show_log_tail
+        explain_termux_failure
+        print_error "Fallaron todas las fuentes de opencode. Revisa el log: $LOG_FILE"
+    fi
+}
+
 install_opencode() {
     section_header "Instalacion"
 
-    run_hidden "Instalar opencode" npm install -g opencode-ai
+    if dpkg -s opencode >/dev/null 2>&1; then
+        run_hidden "Quitar paquete opencode previo" pkg uninstall -y opencode || true
+    fi
+
+    ensure_glibc_layer
+    fetch_opencode_binary
+
+    if [ "$INSTALL_METHOD" != "termuxvoid" ]; then
+        install_launcher
+    fi
 }
 
 verify_installation() {
@@ -335,14 +489,23 @@ print_summary() {
     printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "opencode" "Iniciar OpenCode (TUI interactiva)"
     printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "opencode --version" "Version instalada"
     printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "opencode --help" "Ayuda y comandos"
-    printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "opencode upgrade" "Actualizar opencode"
+    if [ "$INSTALL_METHOD" = "termuxvoid" ]; then
+        printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "pkg upgrade opencode" "Actualizar opencode"
+    else
+        printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "bash install.sh" "Actualizar opencode"
+    fi
     printf "    ${BOLD}%-26s${RESET} ${DIM}%s${RESET}\n" "opencode auth login" "Autenticar con un proveedor"
     echo ""
 
     echo -e "  ${BOLD}Archivos instalados${RESET}"
     echo ""
-    printf "    ${DIM}%-30s ${RESET}%s\n" "Paquete npm:" "opencode-ai"
-    printf "    ${DIM}%-30s ${RESET}%s\n" "Binario:" "$(command -v opencode 2>/dev/null || echo "$OPCODE_BIN_DIR/opencode")"
+    if [ "$INSTALL_METHOD" = "termuxvoid" ]; then
+        printf "    ${DIM}%-30s ${RESET}%s\n" "Origen:" "paquete Termux 'opencode' (termuxvoid)"
+    else
+        printf "    ${DIM}%-30s ${RESET}%s\n" "Origen:" "binario oficial glibc ($INSTALL_METHOD)"
+    fi
+    printf "    ${DIM}%-30s ${RESET}%s\n" "Launcher:" "$OPCODE_BIN_DIR/opencode"
+    printf "    ${DIM}%-30s ${RESET}%s\n" "Binario:" "$OPCODE_REAL"
     printf "    ${DIM}%-30s ${RESET}%s\n" "Configuracion:" "$OPCODE_CONFIG_DIR/"
     if [ -d "$BACKUP_DIR" ] && [ -n "$(find "$BACKUP_DIR" -maxdepth 1 -type d -name 'opencode.backup.*' -print -quit 2>/dev/null || true)" ]; then
         printf "    ${DIM}%-30s ${RESET}%s\n" "Respaldo:" "$BACKUP_DIR/"
@@ -387,9 +550,29 @@ do_uninstall() {
     local removed=false
 
     if command -v opencode &>/dev/null; then
-        echo -e "  ${GREEN}✔${RESET} Desinstalando paquete npm..."
-        npm uninstall -g opencode-ai &>/dev/null || true
-        removed=true
+        if dpkg -s opencode >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✔${RESET} Desinstalando paquete opencode (termuxvoid)..."
+            pkg uninstall -y opencode &>/dev/null || true
+            removed=true
+        fi
+        if [ -f "$OPCODE_BIN_DIR/opencode" ]; then
+            echo -e "  ${GREEN}✔${RESET} Eliminando launcher: $OPCODE_BIN_DIR/opencode"
+            rm -f "$OPCODE_BIN_DIR/opencode"
+            removed=true
+        fi
+        if [ -d "$OPCODE_SHARE_DIR" ]; then
+            echo -e "  ${GREEN}✔${RESET} Eliminando binario: $OPCODE_SHARE_DIR/"
+            rm -rf "$OPCODE_SHARE_DIR"
+            removed=true
+        fi
+        if [ -d "$PREFIX/lib/node_modules/opencode-ai" ]; then
+            echo -e "  ${GREEN}✔${RESET} Limpiando instalacion npm previa..."
+            npm uninstall -g opencode-ai &>/dev/null || true
+            removed=true
+        fi
+        if [ "$removed" = "false" ]; then
+            echo -e "  ${YELLOW}−${RESET} No se encontro instalacion de opencode."
+        fi
     else
         echo -e "  ${YELLOW}−${RESET} No se encontro instalacion de opencode."
     fi
@@ -436,10 +619,12 @@ show_help() {
     echo ""
     echo -e "  ${BOLD}Descripcion:${RESET}"
     echo -e "  ${DIM}Instala OpenCode de forma nativa en Termux."
-    echo -e "  ${DIM}Utiliza npm para instalar el paquete opencode-ai."
+    echo -e "  ${DIM}Descarga el binario oficial glibc y lo lanza con un"
+    echo -e "  ${DIM}launcher nativo Android via la capa glibc de Termux."
+    echo -e "  ${DIM}  - Fuentes: vendor oficial, espejo propio, termuxvoid"
     echo -e "  ${DIM}  - Nativo en Termux (sin proot, sin VMs)"
-    echo -e "  ${DIM}  - Node.js como unica dependencia"
-    echo -e "  ${DIM}  - Actualizable via opencode upgrade${RESET}"
+    echo -e "  ${DIM}  - Sin dependencias npm"
+    echo -e "  ${DIM}  - Actualizar: re-ejecutar install.sh${RESET}"
     echo ""
     echo -e "  ${BOLD}Script creado por Sebastian Laguna${RESET}"
     echo -e "  ${DIM}${SCRIPT_REPO}${RESET}"
