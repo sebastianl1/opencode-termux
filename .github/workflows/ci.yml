@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Instalar node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Instalar herramientas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+
+      - name: Bash - sintaxis y shellcheck
+        run: |
+          bash -n install.sh tools/update-mirror.sh
+          shellcheck -S error install.sh tools/update-mirror.sh
+
+      - name: JS - sintaxis
+        run: |
+          for f in docs/lang/*.js; do node --check "$f"; done
+
+      - name: Descargas solo HTTPS en install.sh
+        run: |
+          ! grep -nE "curl .*http://" install.sh
+          grep -q "set -e" install.sh
+          echo "install.sh OK (https + set -e)"
+
+      - name: Claves i18n completas en todos los idiomas
+        run: |
+          python3 -c "
+          import re
+          from pathlib import Path
+
+          def keys(fn):
+              src = Path(fn).read_text(encoding='utf-8')
+              return set(re.findall(r'^\s*\"([\w.]+)\":', src, re.M))
+
+          base = keys('docs/lang/en.js')
+          for lang in ('de', 'fr', 'pt', 'zh'):
+              k = keys(f'docs/lang/{lang}.js')
+              missing = sorted(base - k)
+              assert not missing, f'{lang}.js no tiene las claves: {missing}'
+          print('i18n OK')
+          "
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ejecutar tests
+        run: |
+          pip install pytest
+          python3 -m pytest tests/ -q

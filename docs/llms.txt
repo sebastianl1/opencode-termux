@@ -1,0 +1,42 @@
+# OpenCode para Termux
+
+> Instalacion nativa de OpenCode en Termux para Android ARM64 (aarch64). Sin proot, sin VMs, sin Cloud Shell. Descarga el binario oficial glibc y lo ejecuta con un launcher nativo Android a traves de la capa glibc de Termux.
+
+## Instalacion
+
+- [README](https://github.com/sebastianl1/opencode-termux#readme)
+- [Landing page](https://sebastianl1.github.io/opencode-termux/): instrucciones y FAQ en 6 idiomas
+
+Instalacion rapida en Termux:
+
+```
+git clone https://github.com/sebastianl1/opencode-termux.git
+cd opencode-termux
+bash install.sh
+```
+
+## Uso
+
+- `opencode` — inicia la CLI interactiva
+- `opencode --version` — muestra la version
+- `opencode auth login` — autentica con un proveedor de IA (Google, OpenAI, Anthropic, GitHub Copilot)
+- `bash install.sh --uninstall` — desinstala
+
+## Fuentes de descarga (por prioridad)
+
+1. Vendor oficial (anomalyco/opencode, ultima version)
+2. Espejo propio (release de este repositorio)
+3. npm oficial (paquete opencode-linux-arm64)
+4. termuxvoid (paquete Termux opencode, ultimo recurso)
+
+## Componentes que instala
+
+- `$PREFIX/bin/opencode` — launcher nativo Android (C, compilado)
+- `$PREFIX/share/opencode/opencode.real` — binario real de OpenCode (build glibc)
+- `~/.config/opencode/` — configuracion de OpenCode
+
+## Enlaces
+
+- Repositorio: https://github.com/sebastianl1/opencode-termux
+- Landing: https://sebastianl1.github.io/opencode-termux/
+- Licencia: MIT

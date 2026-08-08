@@ -154,7 +154,11 @@ rm -rf ~/backups/opencode
 ```
 opencode-termux/
 ├── imagenes/
-│   └── opencode-banner.jpg   # Banner del proyecto
+│   └── opencode.jpg          # Banner del proyecto
+├── docs/                     # Landing page (GitHub Pages) con i18n
+│   ├── index.html            # Landing multilingüe (ES, EN, PT, FR, DE, ZH)
+│   ├── lang/                 # Diccionarios por idioma
+│   └── robots.txt, sitemap.xml
 ├── launcher.c                # Launcher nativo Android (se compila en la instalacion)
 ├── tools/
 │   └── update-mirror.sh      # Actualiza el espejo del binario en GitHub Releases
@@ -168,6 +172,15 @@ opencode-termux/
 ## Autor
 
 **Sebastian Laguna** — Creador y mantenedor del proyecto
+
+---
+
+## Comunidad
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Guia para contribuir
+- [SECURITY.md](SECURITY.md) — Politica de seguridad
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Codigo de conducta
+- [CHANGELOG.md](CHANGELOG.md) — Historial de versiones
 
 ---
 

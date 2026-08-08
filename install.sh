@@ -359,7 +359,7 @@ fetch_binary_from_url() {
     local url="$1"
     local archive="$TMP_DIR/opencode-linux-arm64.tar.gz"
 
-    curl -fsSL --retry 2 --connect-timeout 20 --max-time 900 -o "$archive" "$url" || return 1
+    curl -fsSL --proto =https --retry 2 --connect-timeout 20 --max-time 900 -o "$archive" "$url" || return 1
     mkdir -p "$TMP_DIR/bin"
     tar -xzf "$archive" -C "$TMP_DIR/bin"
     [ -f "$TMP_DIR/bin/opencode" ]
@@ -368,12 +368,12 @@ fetch_binary_from_url() {
 fetch_binary_from_npm() {
     local meta tarball archive
 
-    meta=$(curl -fsSL --connect-timeout 20 --max-time 60 "https://registry.npmjs.org/opencode-linux-arm64/latest") || return 1
+    meta=$(curl -fsSL --proto =https --connect-timeout 20 --max-time 60 "https://registry.npmjs.org/opencode-linux-arm64/latest") || return 1
     tarball=$(printf '%s' "$meta" | grep -o '"tarball":"[^"]*"' | cut -d'"' -f4) || return 1
     [ -n "$tarball" ] || return 1
 
     archive="$TMP_DIR/opencode-linux-arm64.tgz"
-    curl -fsSL --retry 2 --connect-timeout 20 --max-time 900 -o "$archive" "$tarball" || return 1
+    curl -fsSL --proto =https --retry 2 --connect-timeout 20 --max-time 900 -o "$archive" "$tarball" || return 1
     mkdir -p "$TMP_DIR/npmbin"
     tar -xzf "$archive" -C "$TMP_DIR/npmbin"
     [ -f "$TMP_DIR/npmbin/package/bin/opencode" ]
