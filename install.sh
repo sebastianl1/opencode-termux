@@ -36,6 +36,8 @@ OPCODE_SHARE_DIR="$PREFIX/share/opencode"
 OPCODE_REAL="$OPCODE_SHARE_DIR/opencode.real"
 OPCODE_CONFIG_DIR="$HOME/.config/opencode"
 OPCODE_CONFIG_FILE="$OPCODE_CONFIG_DIR/opencode.json"
+GLIBC_LOADER="$PREFIX/glibc/lib/ld-linux-aarch64.so.1"
+GLIBC_LIB="$PREFIX/glibc/lib"
 BACKUP_DIR="$HOME/backups/opencode"
 TMP_DIR="$PREFIX/tmp/opencode-install"
 LOG_FILE="$TMP_DIR/install.log"
@@ -334,24 +336,35 @@ restore_backup() {
 }
 
 ensure_glibc_layer() {
-    if [ ! -f "$PREFIX/etc/apt/sources.list.d/glibc.list" ]; then
-        run_hidden "Actualizar repositorios" pkg update -y || {
-            show_log_tail
-            print_error "Falló 'pkg update'. Revisa tu conexión a internet."
-        }
-        run_hidden "Agregar repositorio glibc" pkg install -y glibc-repo || {
-            show_log_tail
-            print_error "No se pudo agregar el repositorio glibc de Termux."
-        }
-        run_hidden "Actualizar repositorios" pkg update -y || {
-            show_log_tail
-            print_error "Falló 'pkg update'. Revisa tu conexión a internet."
-        }
-    fi
+    ensure_glibc_repo
 
     run_hidden "Instalar capa glibc" pkg install -y glibc ca-certificates ca-certificates-glibc clang curl tar || {
         show_log_tail
         print_error "No se pudo instalar la capa glibc de Termux (glibc)."
+    }
+
+    if [ ! -x "$GLIBC_LOADER" ]; then
+        show_log_tail
+        print_error "No se encontro el cargador glibc (esperado: $GLIBC_LOADER). Reinstala la capa glibc manualmente: pkg reinstall -y glibc"
+    fi
+}
+
+ensure_glibc_repo() {
+    if [ -f "$PREFIX/etc/apt/sources.list.d/glibc.list" ]; then
+        return 0
+    fi
+
+    run_hidden "Actualizar repositorios" pkg update -y || {
+        show_log_tail
+        print_error "Falló 'pkg update'. Revisa tu conexión a internet."
+    }
+    run_hidden "Agregar repositorio glibc" pkg install -y glibc-repo || {
+        show_log_tail
+        print_error "No se pudo agregar el repositorio glibc de Termux."
+    }
+    run_hidden "Actualizar repositorios" pkg update -y || {
+        show_log_tail
+        print_error "Falló 'pkg update'. Revisa tu conexión a internet."
     }
 }
 
@@ -461,12 +474,35 @@ install_opencode() {
 }
 
 verify_installation() {
-    local version
-    if version=$(opencode --version 2>/dev/null); then
-        check_item "Verificar instalacion" "ok" "${version}"
-    else
-        print_error "La verificacion de opencode fallo. Revisa la instalacion."
+    section_header "Verificacion"
+
+    if [ ! -x "$OPCODE_REAL" ]; then
+        print_error "El binario de opencode no esta instalado o no es ejecutable: $OPCODE_REAL"
     fi
+
+    if [ "$INSTALL_METHOD" = "termuxvoid" ]; then
+        if command -v opencode &>/dev/null && [ -x "$(command -v opencode)" ]; then
+            check_item "Verificar instalacion" "ok" "$(command -v opencode)"
+            return 0
+        fi
+        print_error "La verificacion de opencode fallo. Revisa el paquete termuxvoid."
+    fi
+
+    if [ ! -x "$OPCODE_BIN_DIR/opencode" ]; then
+        print_error "El launcher no esta instalado o no es ejecutable: $OPCODE_BIN_DIR/opencode"
+    fi
+
+    if [ ! -x "$GLIBC_LOADER" ]; then
+        print_error "Falta el cargador glibc ($GLIBC_LOADER). Reinstala la capa glibc: pkg reinstall -y glibc"
+    fi
+
+    local version
+    if version=$("$OPCODE_BIN_DIR/opencode" --version 2>&1); then
+        check_item "Verificar instalacion" "ok" "${version}"
+        return 0
+    fi
+
+    print_error "La verificacion de opencode fallo. Revisa la instalacion (log: $LOG_FILE)."
 }
 
 # ── Resumen final ────────────────────────────────────────────────────────────
