@@ -46,7 +46,7 @@ El instalador es interactivo y te guiara paso a paso:
 1. Verifica el entorno (Termux, arquitectura)
 2. Instala la capa glibc de Termux (repositorio oficial `glibc-repo`)
 3. Descarga el binario oficial (vendor -> espejo -> npm -> termuxvoid)
-4. Compila el launcher nativo Android
+4. Compila el launcher nativo Android (si el compilador falla, usa un wrapper equivalente)
 5. Verifica la instalacion
 6. Te muestra los proximos pasos para configurar un proveedor de IA
 

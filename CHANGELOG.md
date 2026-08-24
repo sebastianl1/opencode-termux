@@ -5,6 +5,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- `install.sh`: verifica que el cargador glibc (`$PREFIX/glibc/lib/ld-linux-aarch64.so.1`)
+  exista tras instalar la capa glibc; diagnostica con la ruta exacta si falta.
+- `install.sh`: si la compilación del launcher C falla (p. ej. `cc`/`lld` crashea por
+  tagged pointers de Android en algunos dispositivos), instala un launcher wrapper
+  equivalente (bash + `exec` del cargador glibc) para que la verificación no falle.
+
 ### Added
 - CI/CD: workflow de lint (bash -n, shellcheck, node --check lang, validacion
   i18n y descargas https) y job de tests (pytest).

@@ -43,6 +43,7 @@ TMP_DIR="$PREFIX/tmp/opencode-install"
 LOG_FILE="$TMP_DIR/install.log"
 INSTALL_FAILED=false
 INSTALL_METHOD=""
+INSTALL_LAUNCHER=""
 
 # Fuentes del binario (por prioridad):
 #   A. Vendor oficial  -> GitHub de anomalyco/opencode (siempre ultima)
@@ -399,11 +400,28 @@ install_launcher() {
         print_error "No se encontró 'launcher.c' junto a install.sh ($SCRIPT_DIR)."
     fi
 
-    if ! run_hidden "Compilar launcher nativo" cc -O2 -DPREFIX="\"$PREFIX\"" -o "$OPCODE_BIN_DIR/opencode" "$launcher_src"; then
-        show_log_tail
-        print_error "Falló la compilación del launcher nativo (requiere clang)."
+    if run_hidden "Compilar launcher nativo" cc -O2 -DPREFIX="\"$PREFIX\"" -o "$OPCODE_BIN_DIR/opencode" "$launcher_src"; then
+        chmod 755 "$OPCODE_BIN_DIR/opencode"
+        INSTALL_LAUNCHER="c"
+        return 0
     fi
-    chmod 755 "$OPCODE_BIN_DIR/opencode"
+
+    show_log_tail
+    check_item "Launcher nativo" "skip" "compilador no disponible, usando wrapper"
+    write_shell_launcher "$OPCODE_BIN_DIR/opencode"
+}
+
+write_shell_launcher() {
+    local out="$1"
+    cat > "$out" <<EOF
+#!${PREFIX}/bin/bash
+# OpenCode — Termux launcher (shell wrapper)
+# Equivalente a launcher.c: invoca el cargador glibc de la capa glibc.
+export SSL_CERT_FILE="${PREFIX}/etc/tls/cert.pem"
+exec "${GLIBC_LOADER}" --library-path "${GLIBC_LIB}" "${OPCODE_REAL}" "\$@"
+EOF
+    chmod 755 "$out"
+    INSTALL_LAUNCHER="shell"
 }
 
 fetch_opencode_binary() {
@@ -540,7 +558,11 @@ print_summary() {
     else
         printf "    ${DIM}%-30s ${RESET}%s\n" "Origen:" "binario oficial glibc ($INSTALL_METHOD)"
     fi
-    printf "    ${DIM}%-30s ${RESET}%s\n" "Launcher:" "$OPCODE_BIN_DIR/opencode"
+    if [ "$INSTALL_LAUNCHER" = "c" ]; then
+        printf "    ${DIM}%-30s ${RESET}%s\n" "Launcher:" "$OPCODE_BIN_DIR/opencode (C nativo)"
+    elif [ "$INSTALL_LAUNCHER" = "shell" ]; then
+        printf "    ${DIM}%-30s ${RESET}%s\n" "Launcher:" "$OPCODE_BIN_DIR/opencode (script wrapper)"
+    fi
     printf "    ${DIM}%-30s ${RESET}%s\n" "Binario:" "$OPCODE_REAL"
     printf "    ${DIM}%-30s ${RESET}%s\n" "Configuracion:" "$OPCODE_CONFIG_DIR/"
     if [ -d "$BACKUP_DIR" ] && [ -n "$(find "$BACKUP_DIR" -maxdepth 1 -type d -name 'opencode.backup.*' -print -quit 2>/dev/null || true)" ]; then
