@@ -16,6 +16,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/).
   la fuente y prueba la siguiente (vendor -> espejo -> npm -> termuxvoid).
 - `install.sh`: verificación final ahora muestra el exit code y la salida real de
   `opencode --version` con diagnóstico, en vez del mensaje genérico.
+- **Capa glibc**: crea un directorio `glibc-runtime` con symlinks a las librerias
+  reales versionadas (`.so.6`) y corrige los `.so` planos que en la capa glibc son
+  scripts de enlazado ASCII (p. ej. `libc.so`). El launcher usa
+  `--library-path glibc-runtime:glibc/lib` para que el cargador no aborte con
+  `invalid ELF header` al buscar `libc.so`.
 
 ### Added
 - CI/CD: workflow de lint (bash -n, shellcheck, node --check lang, validacion

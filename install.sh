@@ -38,6 +38,7 @@ OPCODE_CONFIG_DIR="$HOME/.config/opencode"
 OPCODE_CONFIG_FILE="$OPCODE_CONFIG_DIR/opencode.json"
 GLIBC_LOADER="$PREFIX/glibc/lib/ld-linux-aarch64.so.1"
 GLIBC_LIB="$PREFIX/glibc/lib"
+GLIBC_RUNTIME="$OPCODE_SHARE_DIR/glibc-runtime"
 BACKUP_DIR="$HOME/backups/opencode"
 TMP_DIR="$PREFIX/tmp/opencode-install"
 LOG_FILE="$TMP_DIR/install.log"
@@ -418,7 +419,7 @@ write_shell_launcher() {
 # OpenCode — Termux launcher (shell wrapper)
 # Equivalente a launcher.c: invoca el cargador glibc de la capa glibc.
 export SSL_CERT_FILE="${PREFIX}/etc/tls/cert.pem"
-exec "${GLIBC_LOADER}" --library-path "${GLIBC_LIB}" "${OPCODE_REAL}" "\$@"
+exec "${GLIBC_LOADER}" --library-path "${GLIBC_RUNTIME}:${GLIBC_LIB}" "${OPCODE_REAL}" "\$@"
 EOF
     chmod 755 "$out"
     INSTALL_LAUNCHER="shell"
@@ -472,6 +473,50 @@ download_binary_source() {
     return 0
 }
 
+is_elf_file() {
+    local m
+    m=$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    [ "$m" = "7f454c46" ]
+}
+
+build_glibc_runtime() {
+    rm -rf "$GLIBC_RUNTIME"
+    mkdir -p "$GLIBC_RUNTIME"
+
+    local f name cand
+
+    # Symlink de todas las librerias versionadas reales y de los .so planos que ya son ELF
+    for f in "$GLIBC_LIB"/*.so "$GLIBC_LIB"/*.so.*; do
+        [ -e "$f" ] || continue
+        name=$(basename "$f")
+        case "$name" in
+            *.so|*.so.*)
+                [ -e "$GLIBC_RUNTIME/$name" ] && continue
+                ln -sf "$f" "$GLIBC_RUNTIME/$name" 2>/dev/null || true
+                ;;
+        esac
+    done
+
+    # Reasignar librerias cuyo .so plano es un script de enlazado ASCII (libc.so, libm.so, ...)
+    # a su version ELF real (.so.6, .so.2, ...) para que el cargador glibc no aborte
+    for f in "$GLIBC_LIB"/*.so; do
+        [ -e "$f" ] || continue
+        name=$(basename "$f")
+        if is_elf_file "$GLIBC_RUNTIME/$name"; then
+            continue
+        fi
+        for cand in "$GLIBC_LIB/$name".*; do
+            [ -f "$cand" ] || continue
+            if is_elf_file "$cand"; then
+                ln -sf "$cand" "$GLIBC_RUNTIME/$name" 2>/dev/null
+                break
+            fi
+        done
+    done
+
+    check_item "Preparar libs glibc" "ok" "$GLIBC_RUNTIME"
+}
+
 is_valid_glibc_binary() {
     local bin="$1"
 
@@ -519,6 +564,7 @@ install_opencode() {
 
     ensure_glibc_layer
     fetch_opencode_binary
+    build_glibc_runtime
 
     if [ "$INSTALL_METHOD" != "termuxvoid" ]; then
         install_launcher
@@ -548,9 +594,20 @@ verify_installation() {
         print_error "Falta el cargador glibc ($GLIBC_LOADER). Reinstala la capa glibc: pkg reinstall -y glibc"
     fi
 
+    if [ ! -d "$GLIBC_RUNTIME" ]; then
+        build_glibc_runtime
+    fi
+
     local out rc
     out=$("$OPCODE_BIN_DIR/opencode" --version 2>&1)
     rc=$?
+
+    # Reintento con un shim recién construido (cubría libs planas .so rotas)
+    if [ "$rc" -ne 0 ]; then
+        build_glibc_runtime
+        out=$("$OPCODE_BIN_DIR/opencode" --version 2>&1)
+        rc=$?
+    fi
 
     if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
         check_item "Verificar instalacion" "ok" "${out}"

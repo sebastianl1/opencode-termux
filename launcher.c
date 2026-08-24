@@ -20,8 +20,10 @@
 
 #define GLIBC_LOADER PREFIX "/glibc/lib/ld-linux-aarch64.so.1"
 #define GLIBC_LIB    PREFIX "/glibc/lib"
+#define GLIBC_RUNTIME PREFIX "/share/opencode/glibc-runtime"
 #define OPENCODE_REAL PREFIX "/share/opencode/opencode.real"
 #define SSL_CERTS    PREFIX "/etc/tls/cert.pem"
+#define LIBRARY_PATH GLIBC_RUNTIME ":" GLIBC_LIB
 
 int main(int argc, char **argv) {
     char **args;
@@ -37,7 +39,7 @@ int main(int argc, char **argv) {
 
     args[0] = GLIBC_LOADER;
     args[1] = "--library-path";
-    args[2] = GLIBC_LIB;
+    args[2] = LIBRARY_PATH;
     args[3] = OPENCODE_REAL;
     for (i = 1; i < argc; i++) {
         args[i + 3] = argv[i];
