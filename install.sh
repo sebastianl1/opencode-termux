@@ -427,28 +427,62 @@ EOF
 fetch_opencode_binary() {
     mkdir -p "$OPCODE_SHARE_DIR"
 
-    if run_hidden "Descargar binario (vendor)" fetch_binary_from_url "$VENDOR_DL"; then
-        cp "$TMP_DIR/bin/opencode" "$OPCODE_REAL"
-        chmod 755 "$OPCODE_REAL"
+    if download_binary_source "vendor" fetch_binary_from_url "$VENDOR_DL"; then
         INSTALL_METHOD="vendor"
         return 0
     fi
 
-    if run_hidden "Descargar binario (espejo)" fetch_binary_from_url "$MIRROR_DL"; then
-        cp "$TMP_DIR/bin/opencode" "$OPCODE_REAL"
-        chmod 755 "$OPCODE_REAL"
+    if download_binary_source "espejo" fetch_binary_from_url "$MIRROR_DL"; then
         INSTALL_METHOD="espejo"
         return 0
     fi
 
-    if run_hidden "Descargar binario (npm)" fetch_binary_from_npm; then
-        cp "$TMP_DIR/npmbin/package/bin/opencode" "$OPCODE_REAL"
-        chmod 755 "$OPCODE_REAL"
+    if download_binary_source "npm" fetch_binary_from_npm; then
         INSTALL_METHOD="npm"
         return 0
     fi
 
     ensure_termuxvoid_fallback
+}
+
+download_binary_source() {
+    local label="$1"
+    local src="$TMP_DIR/bin/opencode"
+    shift
+
+    if [ "$label" = "npm" ]; then
+        src="$TMP_DIR/npmbin/package/bin/opencode"
+    fi
+
+    if ! run_hidden "Descargar binario ($label)" "$@"; then
+        return 1
+    fi
+
+    cp "$src" "$OPCODE_REAL"
+    chmod 755 "$OPCODE_REAL"
+
+    if ! is_valid_glibc_binary "$OPCODE_REAL"; then
+        echo "--- [validacion $label] binario no valido ---" >> "$LOG_FILE"
+        rm -f "$OPCODE_REAL"
+        check_item "Validar binario ($label)" "skip" "no es un ELF ARM64 valido"
+        return 1
+    fi
+
+    check_item "Validar binario ($label)" "ok" ""
+    return 0
+}
+
+is_valid_glibc_binary() {
+    local bin="$1"
+
+    [ -f "$bin" ] || return 1
+    [ "$(uname -m)" = "aarch64" ] || return 1
+
+    local magic
+    magic=$(dd if="$bin" bs=1 count=4 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    [ "$magic" = "7f454c46" ] || return 1
+
+    return 0
 }
 
 ensure_termuxvoid_fallback() {
@@ -514,13 +548,35 @@ verify_installation() {
         print_error "Falta el cargador glibc ($GLIBC_LOADER). Reinstala la capa glibc: pkg reinstall -y glibc"
     fi
 
-    local version
-    if version=$("$OPCODE_BIN_DIR/opencode" --version 2>&1); then
-        check_item "Verificar instalacion" "ok" "${version}"
+    local out rc
+    out=$("$OPCODE_BIN_DIR/opencode" --version 2>&1)
+    rc=$?
+
+    if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+        check_item "Verificar instalacion" "ok" "${out}"
         return 0
     fi
 
-    print_error "La verificacion de opencode fallo. Revisa la instalacion (log: $LOG_FILE)."
+    {
+        echo "--- [verificacion] fallo ---"
+        echo "exit: $rc"
+        echo "output: $out"
+        echo "loader src: $GLIBC_LOADER"
+        echo "binario: $(readelf -h "$OPCODE_REAL" 2>/dev/null | grep -m1 Class || echo 'no-readelf')"
+    } >> "$LOG_FILE"
+
+    echo ""
+    echo -e "  ${RED}${BOLD}La verificacion de opencode fallo.${RESET}"
+    echo -e "  ${DIM}Exit code:${RESET} ${BOLD}$rc${RESET}"
+    if [ -n "$out" ]; then
+        echo -e "  ${DIM}Salida:${RESET}"
+        printf '    %s\n' "$out" | while IFS= read -r line; do
+            echo -e "  ${DIM}  ${line}${RESET}"
+        done
+    fi
+    echo ""
+    show_log_tail
+    print_error "Revisa la salida de arriba. Si el mensaje es de tagged pointers, reinstala la capa glibc: pkg reinstall -y glibc"
 }
 
 # ── Resumen final ────────────────────────────────────────────────────────────

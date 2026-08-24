@@ -11,6 +11,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/).
 - `install.sh`: si la compilación del launcher C falla (p. ej. `cc`/`lld` crashea por
   tagged pointers de Android en algunos dispositivos), instala un launcher wrapper
   equivalente (bash + `exec` del cargador glibc) para que la verificación no falle.
+- `install.sh`: valida que el binario descargado sea un ELF ARM64 real antes de
+  aceptarlo; si es inválido (descarga corrupta, arquitectura equivocada), descarta
+  la fuente y prueba la siguiente (vendor -> espejo -> npm -> termuxvoid).
+- `install.sh`: verificación final ahora muestra el exit code y la salida real de
+  `opencode --version` con diagnóstico, en vez del mensaje genérico.
 
 ### Added
 - CI/CD: workflow de lint (bash -n, shellcheck, node --check lang, validacion
