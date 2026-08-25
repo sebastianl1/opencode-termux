@@ -69,7 +69,7 @@
     "softwareVersion": "2.0.0",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "aggregateRating": { "@type": "AggregateRating", "ratingValue": "5", "ratingCount": "1" },
-    "featureList": "Instalación nativa en Termux, sin proot, launcher nativo Android (Bionic), capa glibc de Termux, descarga multi-fuente (vendor, mirror, npm, termuxvoid), integración con proveedores de IA"
+    "featureList": "Instalación nativa en Termux, sin proot, launcher nativo Android (Bionic), capa glibc de Termux, descarga multi-fuente (vendor, mirror, npm, termuxvoid), validación de ELF, limpieza de LD_PRELOAD para compatibilidad en cualquier dispositivo, directorio glibc-runtime, modo de diagnóstico integrado (install.sh --diagnose)"
   }
   </script>
 
@@ -123,6 +123,11 @@
         "@type": "Question",
         "name": "¿Qué pasa si el repositorio del vendor oficial desaparece?",
         "acceptedAnswer": { "@type": "Answer", "text": "El instalador usa descarga multi-fuente por prioridad: vendor oficial (anomalyco/opencode), espejo propio (GitHub Releases de este repo), npm oficial (opencode-linux-arm64) y termuxvoid (paquete Termux) como último recurso." }
+      },
+      {
+        "@type": "Question",
+        "name": "¿Por qué opencode no abre o la verificación falla en mi dispositivo?",
+        "acceptedAnswer": { "@type": "Answer", "text": "En algunos dispositivos Termux inyecta libtermux-exec-ld-preload.so (de bionic) en LD_PRELOAD y el cargador glibc no puede cargarla. El instalador limpia LD_PRELOAD/LD_LIBRARY_PATH antes de lanzar el binario y crea un directorio glibc-runtime con las librerías reales. Si persiste, corre 'bash install.sh --diagnose' para ver el detalle exacto." }
       }
     ]
   }
@@ -552,6 +557,10 @@
             <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg></div>
             <div><h3 data-i18n="feat6_t">Descarga multi-fuente</h3><p data-i18n="feat6_d">Vendor oficial → espejo propio → npm → termuxvoid. Si una fuente cae, pasa a la siguiente.</p></div>
           </div>
+          <div class="feat reveal">
+            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1"/></svg></div>
+            <div><h3 data-i18n="feat7_t">Compatibilidad máxima</h3><p data-i18n="feat7_d">Limpia LD_PRELOAD/LD_LIBRARY_PATH de la librería bionic antes de lanzar el binario, y crea un directorio glibc-runtime con las librerías reales para que cargue en cualquier dispositivo.</p></div>
+          </div>
         </div>
       </div>
     </section>
@@ -592,7 +601,7 @@
 <span class="cmd">bash</span> install.sh</code></pre>
             <button class="c-copy" data-copy data-i18n="copy.btn">Copiar</button>
           </div>
-          <p style="text-align:center;color:var(--muted);font-size:.9rem" class="reveal" data-i18n="install.experto.hint">El instalador verifica el entorno, instala la capa glibc, compila el launcher y valida la integridad del binario.</p>
+          <p data-i18n="install.experto.hint">El instalador verifica el entorno, instala la capa glibc, compila o genera el launcher, valida el binario y limpia LD_PRELOAD para máxima compatibilidad.</p>
         </div>
       </div>
     </section>
@@ -655,6 +664,7 @@
           <div class="faq-item reveal"><button class="faq-q"><span data-i18n="faq7.q">¿Cómo desinstalo opencode?</span><span class="chev">▼</span></button><div class="faq-a"><p data-i18n="faq7.a">Ejecuta <code>bash install.sh --uninstall</code> en el repositorio clonado. Esto elimina el launcher de <code>$PREFIX/bin</code> y el binario real, y ofrece eliminar la configuración. Los respaldos quedan en <code>~/backups/opencode</code>.</p></div></div>
           <div class="faq-item reveal"><button class="faq-q"><span data-i18n="faq8.q">¿Qué proveedores de IA soporta OpenCode?</span><span class="chev">▼</span></button><div class="faq-a"><p data-i18n="faq8.a">OpenCode es agnóstico de proveedores. Tras instalar, ejecuta <code>opencode auth login</code> y elige Google (Gemini), OpenAI (GPT), Anthropic (Claude), GitHub Copilot o cualquier proveedor compatible.</p></div></div>
           <div class="faq-item reveal"><button class="faq-q"><span data-i18n="faq9.q">¿Qué pasa si el repositorio del vendor oficial desaparece?</span><span class="chev">▼</span></button><div class="faq-a"><p data-i18n="faq9.a">El instalador usa descarga <strong>multi-fuente</strong> por prioridad: <strong>vendor oficial</strong> (anomalyco/opencode), <strong>espejo propio</strong> (GitHub Releases de este repo), <strong>npm oficial</strong> (<code>opencode-linux-arm64</code>) y <strong>termuxvoid</strong> (paquete Termux) como último recurso. Si una fuente cae, pasa automáticamente a la siguiente.</p></div></div>
+          <div class="faq-item reveal"><button class="faq-q"><span data-i18n="faq10.q">¿Por qué opencode no abre o la verificación falla en mi dispositivo?</span><span class="chev">▼</span></button><div class="faq-a"><p data-i18n="faq10.a">En algunos dispositivos, Termux inyecta la librería <code>libtermux-exec-ld-preload.so</code> (de Android/bionic) en <code>LD_PRELOAD</code>. El cargador glibc no puede cargarla y opencode falla al arrancar. El instalador limpia <code>LD_PRELOAD</code>/<code>LD_LIBRARY_PATH</code> antes de lanzar el binario y usa un directorio <code>glibc-runtime</code> con las librerías reales. Ejecuta <code>bash install.sh --uninstall</code> y luego <code>bash install.sh</code> para reprobar; si aún falla, corre <code>bash install.sh --diagnose</code> para ver el detalle exacto.</p></div></div>
         </div>
       </div>
     </section>
@@ -728,12 +738,13 @@
       "feat4_t": "Instalación con un clic", "feat4_d": "Script interactivo que verifica el entorno, descarga, compila el launcher y configura todo.",
       "feat5_t": "Verificación de integridad", "feat5_d": "Comprueba que los binarios descargados sean válidos (ELF y tamaño) antes de instalar.",
       "feat6_t": "Descarga multi-fuente", "feat6_d": "Vendor oficial → espejo propio → npm → termuxvoid. Si una fuente cae, pasa a la siguiente.",
+      "feat7_t": "Compatibilidad máxima", "feat7_d": "Limpia LD_PRELOAD/LD_LIBRARY_PATH de la librería bionic antes de lanzar el binario, y crea un directorio glibc-runtime con las librerías reales para que cargue en cualquier dispositivo.",
       "install.eyebrow": "Instalación", "install.title": "Listo en menos de 2 minutos",
       "install.sub": "Elige tu nivel y copia el bloque de comandos.",
       "install.tab_nuevo": "Nuevo en Termux", "install.tab_experto": "Ya uso Termux",
       "install.nuevo.c1": "# 1. Actualizar e instalar dependencias", "install.nuevo.c2": "# 2. Clonar e instalar",
       "install.nuevo.hint": "¿Primera vez con Termux? <a href=\"https://github.com/sebastianl1/opencode-termux#requisitos\">Lee los requisitos y la guía</a> antes de empezar.",
-      "install.experto.hint": "El instalador verifica el entorno, instala la capa glibc, compila el launcher y valida la integridad del binario.",
+      "install.experto.hint": "El instalador verifica el entorno, instala la capa glibc, compila o genera el launcher, valida el binario y limpia LD_PRELOAD para máxima compatibilidad.",
       "uso.eyebrow": "Uso", "uso.title": "Empieza a usar OpenCode",
       "uso.sub": "Comandos principales para trabajar con la terminal de IA desde tu Android.",
       "uso.c1": "# Iniciar la CLI interactiva", "uso.c2": "# Autenticar con tu proveedor de IA", "uso.c3": "# Verificar la versión", "uso.c4": "# Actualizar a la última versión",
@@ -753,6 +764,7 @@
       "faq7.q": "¿Cómo desinstalo opencode?", "faq7.a": "Ejecuta <code>bash install.sh --uninstall</code> en el repositorio clonado. Esto elimina el launcher de <code>$PREFIX/bin</code> y el binario real, y ofrece eliminar la configuración. Los respaldos quedan en <code>~/backups/opencode</code>.",
       "faq8.q": "¿Qué proveedores de IA soporta OpenCode?", "faq8.a": "OpenCode es agnóstico de proveedores. Tras instalar, ejecuta <code>opencode auth login</code> y elige Google (Gemini), OpenAI (GPT), Anthropic (Claude), GitHub Copilot o cualquier proveedor compatible.",
       "faq9.q": "¿Qué pasa si el repositorio del vendor oficial desaparece?", "faq9.a": "El instalador usa descarga <strong>multi-fuente</strong> por prioridad: <strong>vendor oficial</strong> (anomalyco/opencode), <strong>espejo propio</strong> (GitHub Releases de este repo), <strong>npm oficial</strong> (<code>opencode-linux-arm64</code>) y <strong>termuxvoid</strong> (paquete Termux) como último recurso. Si una fuente cae, pasa automáticamente a la siguiente.",
+      "faq10.q": "¿Por qué opencode no abre o la verificación falla en mi dispositivo?", "faq10.a": "En algunos dispositivos, Termux inyecta la librería <code>libtermux-exec-ld-preload.so</code> (de Android/bionic) en <code>LD_PRELOAD</code>. El cargador glibc no puede cargarla y opencode falla al arrancar. El instalador limpia <code>LD_PRELOAD</code>/<code>LD_LIBRARY_PATH</code> antes de lanzar el binario y usa un directorio <code>glibc-runtime</code> con las librerías reales. Ejecuta <code>bash install.sh --uninstall</code> y luego <code>bash install.sh</code> para reprobar; si aún falla, corre <code>bash install.sh --diagnose</code> para ver el detalle exacto.",
       "footer.about_h": "OpenCode · Termux", "footer.about_d": "Instalación nativa de OpenCode en Termux para Android ARM64. Sin proot, sin VMs, sin Cloud Shell. Terminal de IA agnóstica de proveedores.",
       "footer.res_h": "Recursos", "footer.res.install": "Instalación", "footer.res.commands": "Comandos", "footer.res.faq": "FAQ", "footer.res.readme": "README",
       "footer.links_h": "Enlaces", "footer.links.repo": "Repositorio", "footer.links.portfolio": "Portafolio del autor", "footer.links.opencode": "OpenCode oficial", "footer.links.termux": "Termux en F-Droid", "footer.links.vendor": "Vendor oficial",
