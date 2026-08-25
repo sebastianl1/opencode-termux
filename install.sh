@@ -786,6 +786,7 @@ show_help() {
     printf "  ${BOLD}%-28s${RESET} ${DIM}%s${RESET}\n" "bash install.sh" "Instalacion completa"
     printf "  ${BOLD}%-28s${RESET} ${DIM}%s${RESET}\n" "bash install.sh --help" "Muestra esta ayuda"
     printf "  ${BOLD}%-28s${RESET} ${DIM}%s${RESET}\n" "bash install.sh --version" "Muestra la version"
+    printf "  ${BOLD}%-28s${RESET} ${DIM}%s${RESET}\n" "bash install.sh --diagnose" "Diagnostica una instalacion (sin cambiar nada)"
     printf "  ${BOLD}%-28s${RESET} ${DIM}%s${RESET}\n" "bash install.sh --uninstall" "Desinstala opencode"
     echo ""
     echo -e "  ${BOLD}Descripcion:${RESET}"
@@ -803,6 +804,98 @@ show_help() {
     exit 0
 }
 
+# ── Diagnostico ─────────────────────────────────────────────────────────────
+
+print_lib_check() {
+    local name="$1"
+    local file="$2"
+    if [ -L "$file" ]; then
+        printf "  %-22s %s -> %s\n" "$name" "$(basename "$file")" "$(readlink "$file")"
+    elif [ -f "$file" ]; then
+        local kind
+        if is_elf_file "$file"; then
+            kind="ELF valido"
+        else
+            kind="NO es ELF (script o corrupto)"
+        fi
+        printf "  %-22s %s  [%s]\n" "$name" "$(basename "$file")" "$kind"
+    else
+        printf "  %-22s %s  [NO EXISTE]\n" "$name" "$file"
+    fi
+}
+
+do_diagnose() {
+    echo ""
+    box_line "┌$(make_line)┐"
+    box_text "Diagnostico de instalacion" "$WHITE${BOLD}"
+    box_line "└$(make_line)┘"
+    echo ""
+
+    echo -e "  ${BOLD}Entorno${RESET}"
+    printf "  %-22s %s\n" "Arquitectura:" "$(uname -m)"
+    printf "  %-22s %s\n" "Termux:" "${TERMUX_VERSION:-no detectado}"
+    printf "  %-22s %s\n" "PREFIX:" "$PREFIX"
+    echo ""
+
+    echo -e "  ${BOLD}Launcher${RESET}"
+    if [ -f "$OPCODE_BIN_DIR/opencode" ]; then
+        if head -c2 "$OPCODE_BIN_DIR/opencode" | od -An -tx1 | tr -d ' \n' | grep -q 7f45; then
+            echo "  $OPCODE_BIN_DIR/opencode  [binario C nativo]"
+        else
+            echo "  $OPCODE_BIN_DIR/opencode  [script wrapper]"
+            echo "  Contenido:"
+            sed -n '1,8p' "$OPCODE_BIN_DIR/opencode" | sed 's/^/    /'
+        fi
+    else
+        echo "  $OPCODE_BIN_DIR/opencode  [NO EXISTE]"
+    fi
+    echo ""
+
+    echo -e "  ${BOLD}Binario real (opencode.real)${RESET}"
+    if [ -f "$OPCODE_REAL" ]; then
+        printf "  %-24s %s\n" "Tamanio:" "$(du -h "$OPCODE_REAL" | cut -f1)"
+        echo "  Dependencias (DT_NEEDED):"
+        readelf -d "$OPCODE_REAL" 2>/dev/null | grep NEEDED | sed 's/0x[0-9a-f]* (NEEDED)  *Shared library/         NEEDED/' || {
+            echo "    (readelf no disponible o binario no ELF)"
+            echo "    Magic: $(head -c4 "$OPCODE_REAL" | od -An -tx1 | tr -d ' \n')"
+        }
+    else
+        echo "  $OPCODE_REAL  [NO EXISTE]"
+    fi
+    echo ""
+
+    echo -e "  ${BOLD}Capa glibc${RESET}"
+    print_lib_check "cargador" "$GLIBC_LOADER"
+    print_lib_check "libc.so" "$GLIBC_LIB/libc.so"
+    print_lib_check "libc.so.6" "$GLIBC_LIB/libc.so.6"
+    print_lib_check "libm.so.6" "$GLIBC_LIB/libm.so.6"
+    print_lib_check "libpthread.so.0" "$GLIBC_LIB/libpthread.so.0"
+    print_lib_check "libdl.so.2" "$GLIBC_LIB/libdl.so.2"
+    if [ ! -d "$GLIBC_RUNTIME" ]; then
+        build_glibc_runtime
+    fi
+    print_lib_check "shim libc.so" "$GLIBC_RUNTIME/libc.so"
+    echo ""
+
+    echo -e "  ${BOLD}Resolucion del cargador (con shim)${RESET}"
+    if [ -f "$OPCODE_REAL" ] && [ -x "$GLIBC_LOADER" ]; then
+        "$GLIBC_LOADER" --library-path "$GLIBC_RUNTIME:$GLIBC_LIB" --list "$OPCODE_REAL" 2>&1 | while IFS= read -r line; do
+            echo -e "  ${DIM}${line}${RESET}"
+        done
+    else
+        echo "  (faltan opencode.real o cargador)"
+    fi
+    echo ""
+
+    echo -e "  ${BOLD}Prueba directa (via cargador)${RESET}"
+    if [ -f "$OPCODE_REAL" ] && [ -x "$GLIBC_LOADER" ]; then
+        "$GLIBC_LOADER" --library-path "$GLIBC_RUNTIME:$GLIBC_LIB" "$OPCODE_REAL" --version 2>&1
+        echo "  exit=$?"
+    fi
+    echo ""
+    exit 0
+}
+
 # ── Main ────────────────────────────────────────────────────────────────────
 
 main() {
@@ -816,6 +909,9 @@ main() {
             ;;
         --uninstall)
             do_uninstall
+            ;;
+        --diagnose)
+            do_diagnose
             ;;
         "")
             ;;

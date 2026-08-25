@@ -23,6 +23,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/).
   `invalid ELF header` al buscar `libc.so`.
 
 ### Added
+- `install.sh --diagnose`: muestra entorno, launcher, DT_NEEDED del binario real,
+  estado de las libs glibc (incluido el shim `glibc-runtime`) y la resolucion del
+  cargador, con prueba directa `--version`. Sin cambiar nada.
 - CI/CD: workflow de lint (bash -n, shellcheck, node --check lang, validacion
   i18n y descargas https) y job de tests (pytest).
 - CD: workflow de despliegue de GitHub Pages (docs/).
