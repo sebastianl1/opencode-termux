@@ -6,6 +6,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- **Launcher (C y wrapper)**: limpia `LD_PRELOAD`/`LD_LIBRARY_PATH` antes de lanzar
+  el binario glibc. Termux inyecta `libtermux-exec-ld-preload.so` (libreria de
+  bionic) en `LD_PRELOAD`; el cargador glibc intenta cargarla y aborta con
+  `version 'GLIBC' not found`. Era la causa de que algunos dispositivos no
+  arrancaran opencode ("no sale nada en la verificación").
 - `install.sh`: verifica que el cargador glibc (`$PREFIX/glibc/lib/ld-linux-aarch64.so.1`)
   exista tras instalar la capa glibc; diagnostica con la ruta exacta si falta.
 - `install.sh`: si la compilación del launcher C falla (p. ej. `cc`/`lld` crashea por

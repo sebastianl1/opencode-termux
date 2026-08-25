@@ -29,6 +29,14 @@ int main(int argc, char **argv) {
     char **args;
     int i;
 
+    /*
+     * Limpia LD_PRELOAD/LD_LIBRARY_PATH de bionic: si Termux inyecta la
+     * libreria 'libtermux-exec-ld-preload.so' (libc de Android), el cargador
+     * glibc no puede cargarla (version 'GLIBC' not found) y opencode falla.
+     */
+    unsetenv("LD_PRELOAD");
+    unsetenv("LD_LIBRARY_PATH");
+
     setenv("SSL_CERT_FILE", SSL_CERTS, 1);
 
     args = calloc((size_t)argc + 4, sizeof(char *));

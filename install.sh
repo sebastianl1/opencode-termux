@@ -418,6 +418,10 @@ write_shell_launcher() {
 #!${PREFIX}/bin/bash
 # OpenCode — Termux launcher (shell wrapper)
 # Equivalente a launcher.c: invoca el cargador glibc de la capa glibc.
+# Limpia LD_PRELOAD/LD_LIBRARY_PATH: si Termux inyecta la libreria bionic
+# 'libtermux-exec-ld-preload.so', el cargador glibc no puede cargarla
+# (version 'GLIBC' not found) y opencode falla al arrancar.
+unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
 export SSL_CERT_FILE="${PREFIX}/etc/tls/cert.pem"
 exec "${GLIBC_LOADER}" --library-path "${GLIBC_RUNTIME}:${GLIBC_LIB}" "${OPCODE_REAL}" "\$@"
 EOF
